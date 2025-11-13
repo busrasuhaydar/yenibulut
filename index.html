@@ -49,7 +49,8 @@
         }
 
         function resizeCanvas() {
-            const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+            // Performans optimizasyonu: DPR'yi düşük tut, yüksek çözünürlük için upscaling kullan
+            const dpr = Math.min(window.devicePixelRatio || 1, 1.0);
             canvas.width = window.innerWidth * dpr;
             canvas.height = window.innerHeight * dpr;
             canvas.style.width = window.innerWidth + 'px';
@@ -59,12 +60,45 @@
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
 
-        let mouseX = 0.5;
-        let mouseY = 0.5;
-        canvas.addEventListener('mousemove', (e) => {
-            mouseX = e.clientX / window.innerWidth;
-            mouseY = 1.0 - (e.clientY / window.innerHeight);
+        // Kamera kontrolü için değişkenler
+        let cameraYaw = 0.0;
+        let cameraPitch = 0.3;
+        let isDragging = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+
+        // Mouse ile kamera kontrolü (sürükle-bırak)
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+            canvas.style.cursor = 'grabbing';
         });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const deltaX = (e.clientX - lastMouseX) * 0.005;
+                const deltaY = (e.clientY - lastMouseY) * 0.005;
+
+                cameraYaw -= deltaX;
+                cameraPitch = Math.max(-1.5, Math.min(1.5, cameraPitch - deltaY));
+
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+            canvas.style.cursor = 'grab';
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            isDragging = false;
+            canvas.style.cursor = 'grab';
+        });
+
+        canvas.style.cursor = 'grab';
 
         const vertexShaderSource = `
             attribute vec2 a_position;
@@ -77,7 +111,9 @@
             precision mediump float;
             uniform vec2 u_resolution;
             uniform float u_time;
-            uniform vec2 u_mouse;
+            uniform float u_cameraYaw;
+            uniform float u_cameraPitch;
+            uniform vec3 u_cameraOffset;
 
             mat3 setCamera(vec3 ro, vec3 ta, float cr) {
                 vec3 cw = normalize(ta - ro);
@@ -109,10 +145,11 @@
                     f.z) * 2.0 - 1.0;
             }
 
+            // 9 oktavlı FBM - En detaylı bulutlar için
             float fbm(vec3 p) {
                 float f = 0.0;
                 float a = 0.5;
-                for(int i = 0; i < 5; i++) {
+                for(int i = 0; i < 9; i++) {
                     f += a * noise(p);
                     p = p * 2.03;
                     a *= 0.5;
@@ -151,13 +188,14 @@
             }
 
             vec3 calculateLighting(vec3 pos, float den, vec3 sundir, float t) {
+                // Performans: Shadow sampling azaltıldı (4->3)
                 float shadow = 0.0;
                 float st = 0.15;
-                for(int i = 0; i < 4; i++) {
+                for(int i = 0; i < 3; i++) {
                     shadow += map3(pos + sundir * st);
-                    st += 0.2;
+                    st += 0.25;
                 }
-                shadow = exp(-shadow * 0.7);
+                shadow = exp(-shadow * 0.75);
                 
                 float ao = 1.0 - den * 0.4;
                 
@@ -180,28 +218,52 @@
                 vec4 sum = vec4(0.0);
                 float t = 0.0;
                 vec3 sundir = normalize(vec3(-0.6, 0.5, -0.8));
-                
-                for(int i = 0; i < 35; i++) {
+
+                // Performans: Iteration sayısı optimize edildi (35->28)
+                for(int i = 0; i < 28; i++) {
                     vec3 pos = ro + t * rd;
                     if(pos.y < -3.0 || pos.y > 2.0 || sum.a > 0.98) break;
                     
                     float den = map3(pos);
                     if(den > 0.01) {
                         vec3 light = calculateLighting(pos, den, sundir, t);
-                        
+
                         float denFactor = smoothstep(0.0, 1.0, den);
+                        // x3 daha fazla ton - Zengin renk geçişleri
                         vec3 cloudBase = vec3(1.9, 0.85, 0.55);
+                        vec3 cloudLight1 = vec3(1.85, 0.8, 0.53);
+                        vec3 cloudLight2 = vec3(1.8, 0.75, 0.5);
                         vec3 cloudMid1 = vec3(1.7, 0.65, 0.45);
-                        vec3 cloudMid2 = vec3(1.4, 0.5, 0.5);
+                        vec3 cloudMid2 = vec3(1.6, 0.6, 0.48);
+                        vec3 cloudMid3 = vec3(1.5, 0.55, 0.5);
+                        vec3 cloudMid4 = vec3(1.4, 0.5, 0.5);
+                        vec3 cloudMid5 = vec3(1.2, 0.45, 0.52);
+                        vec3 cloudMid6 = vec3(1.0, 0.4, 0.52);
                         vec3 cloudDark1 = vec3(0.8, 0.35, 0.5);
-                        vec3 cloudDark2 = vec3(0.55, 0.25, 0.45);
-                        vec3 cloudDeep = vec3(0.45, 0.2, 0.4);
-                        
-                        vec3 cloudColor = mix(cloudBase, cloudMid1, denFactor * 0.3);
-                        cloudColor = mix(cloudColor, cloudMid2, denFactor * 0.5);
+                        vec3 cloudDark2 = vec3(0.7, 0.32, 0.48);
+                        vec3 cloudDark3 = vec3(0.6, 0.28, 0.46);
+                        vec3 cloudDark4 = vec3(0.55, 0.25, 0.45);
+                        vec3 cloudDark5 = vec3(0.5, 0.23, 0.43);
+                        vec3 cloudDeep1 = vec3(0.45, 0.2, 0.4);
+                        vec3 cloudDeep2 = vec3(0.4, 0.18, 0.38);
+                        vec3 cloudDeep3 = vec3(0.35, 0.16, 0.36);
+
+                        vec3 cloudColor = mix(cloudBase, cloudLight1, denFactor * 0.1);
+                        cloudColor = mix(cloudColor, cloudLight2, denFactor * 0.2);
+                        cloudColor = mix(cloudColor, cloudMid1, denFactor * 0.3);
+                        cloudColor = mix(cloudColor, cloudMid2, denFactor * 0.35);
+                        cloudColor = mix(cloudColor, cloudMid3, denFactor * 0.4);
+                        cloudColor = mix(cloudColor, cloudMid4, denFactor * 0.5);
+                        cloudColor = mix(cloudColor, cloudMid5, denFactor * 0.55);
+                        cloudColor = mix(cloudColor, cloudMid6, denFactor * 0.6);
                         cloudColor = mix(cloudColor, cloudDark1, denFactor * 0.7);
-                        cloudColor = mix(cloudColor, cloudDark2, denFactor * 0.85);
-                        cloudColor = mix(cloudColor, cloudDeep, denFactor * 0.95);
+                        cloudColor = mix(cloudColor, cloudDark2, denFactor * 0.75);
+                        cloudColor = mix(cloudColor, cloudDark3, denFactor * 0.8);
+                        cloudColor = mix(cloudColor, cloudDark4, denFactor * 0.85);
+                        cloudColor = mix(cloudColor, cloudDark5, denFactor * 0.9);
+                        cloudColor = mix(cloudColor, cloudDeep1, denFactor * 0.95);
+                        cloudColor = mix(cloudColor, cloudDeep2, denFactor * 0.97);
+                        cloudColor = mix(cloudColor, cloudDeep3, denFactor * 0.99);
                         
                         vec4 col = vec4(cloudColor * light, den);
                         col.xyz = mix(col.xyz, bgcol, 1.0 - exp(-0.0018 * t * t));
@@ -211,17 +273,24 @@
                     }
                     t += max(0.06, 0.05 * t);
                 }
-                
-                for(int i = 0; i < 25; i++) {
+
+                // Performans: İkinci pass iteration sayısı optimize edildi (25->20)
+                for(int i = 0; i < 20; i++) {
                     vec3 pos = ro + t * rd;
                     if(pos.y < -3.0 || pos.y > 2.0 || sum.a > 0.98) break;
                     
                     float den = map2(pos);
                     if(den > 0.01) {
                         vec3 light = calculateLighting(pos, den, sundir, t);
-                        
+
                         float denFactor = smoothstep(0.0, 1.0, den);
-                        vec3 cloudColor = mix(vec3(1.6, 0.7, 0.45), vec3(0.7, 0.35, 0.5), denFactor * 0.6);
+                        // x3 daha fazla ton - Uzak bulutlar için
+                        vec3 cloudColor = mix(vec3(1.6, 0.7, 0.45), vec3(1.4, 0.6, 0.47), denFactor * 0.2);
+                        cloudColor = mix(cloudColor, vec3(1.2, 0.55, 0.48), denFactor * 0.35);
+                        cloudColor = mix(cloudColor, vec3(1.0, 0.5, 0.49), denFactor * 0.5);
+                        cloudColor = mix(cloudColor, vec3(0.85, 0.42, 0.495), denFactor * 0.6);
+                        cloudColor = mix(cloudColor, vec3(0.7, 0.35, 0.5), denFactor * 0.7);
+                        cloudColor = mix(cloudColor, vec3(0.6, 0.3, 0.475), denFactor * 0.8);
                         cloudColor = mix(cloudColor, vec3(0.5, 0.25, 0.45), denFactor * 0.9);
                         
                         vec4 col = vec4(cloudColor * light, den);
@@ -238,26 +307,56 @@
 
             void main() {
                 vec2 p = (2.0 * gl_FragCoord.xy - u_resolution.xy) / u_resolution.y;
-                vec2 m = u_mouse.xy / u_resolution.xy;
-                
-                vec3 ro = 4.0 * normalize(vec3(sin(3.0 * m.x), 0.8 * m.y, cos(3.0 * m.x))) - vec3(0.0, 0.1, 0.0);
-                vec3 ta = vec3(0.0, -1.0, 0.0);
-                mat3 ca = setCamera(ro, ta, 0.07 * cos(0.25 * u_time));
+
+                // Otomatik kamera hareketi - Sonsuz uçuş
+                vec3 ro = u_cameraOffset;
+
+                // Mouse ile bakış açısı kontrolü
+                float pitch = u_cameraPitch;
+                float yaw = u_cameraYaw;
+
+                vec3 lookDir = vec3(
+                    cos(pitch) * sin(yaw),
+                    sin(pitch),
+                    cos(pitch) * cos(yaw)
+                );
+
+                vec3 ta = ro + lookDir * 5.0;
+                mat3 ca = setCamera(ro, ta, 0.05 * cos(0.25 * u_time));
                 vec3 rd = ca * normalize(vec3(p.xy, 1.5));
                 
                 vec3 sundir = normalize(vec3(-0.6, 0.5, -0.8));
                 float sun = clamp(dot(sundir, rd), 0.0, 1.0);
                 
                 float skyGradient = pow(1.0 - max(rd.y, 0.0), 1.3);
+                // x3 daha fazla gökyüzü tonu - Zengin geçişler
                 vec3 skyHorizon = vec3(0.9, 0.4, 0.65);
+                vec3 skyLow1 = vec3(0.95, 0.42, 0.62);
+                vec3 skyLow2 = vec3(1.0, 0.43, 0.6);
                 vec3 skyMid1 = vec3(1.1, 0.45, 0.55);
-                vec3 skyMid2 = vec3(1.3, 0.5, 0.45);
-                vec3 skyZenith1 = vec3(1.5, 0.55, 0.35);
+                vec3 skyMid2 = vec3(1.15, 0.46, 0.52);
+                vec3 skyMid3 = vec3(1.2, 0.48, 0.48);
+                vec3 skyMid4 = vec3(1.3, 0.5, 0.45);
+                vec3 skyMid5 = vec3(1.35, 0.51, 0.42);
+                vec3 skyMid6 = vec3(1.4, 0.53, 0.4);
+                vec3 skyHigh1 = vec3(1.45, 0.54, 0.37);
+                vec3 skyHigh2 = vec3(1.5, 0.55, 0.35);
+                vec3 skyHigh3 = vec3(1.53, 0.53, 0.33);
+                vec3 skyZenith1 = vec3(1.56, 0.51, 0.31);
                 vec3 skyZenith2 = vec3(1.6, 0.5, 0.3);
-                
-                vec3 col = mix(skyHorizon, skyMid1, skyGradient * 0.3);
-                col = mix(col, skyMid2, skyGradient * 0.5);
-                col = mix(col, skyZenith1, skyGradient * 0.75);
+
+                vec3 col = mix(skyHorizon, skyLow1, skyGradient * 0.15);
+                col = mix(col, skyLow2, skyGradient * 0.25);
+                col = mix(col, skyMid1, skyGradient * 0.35);
+                col = mix(col, skyMid2, skyGradient * 0.42);
+                col = mix(col, skyMid3, skyGradient * 0.48);
+                col = mix(col, skyMid4, skyGradient * 0.55);
+                col = mix(col, skyMid5, skyGradient * 0.62);
+                col = mix(col, skyMid6, skyGradient * 0.68);
+                col = mix(col, skyHigh1, skyGradient * 0.75);
+                col = mix(col, skyHigh2, skyGradient * 0.82);
+                col = mix(col, skyHigh3, skyGradient * 0.9);
+                col = mix(col, skyZenith1, skyGradient * 0.95);
                 col = mix(col, skyZenith2, skyGradient);
                 
                 col += vec3(1.9, 0.65, 0.35) * pow(sun, 12.0) * 0.7;
@@ -321,16 +420,26 @@
 
         const resolutionLocation = gl.getUniformLocation(program, 'u_resolution');
         const timeLocation = gl.getUniformLocation(program, 'u_time');
-        const mouseLocation = gl.getUniformLocation(program, 'u_mouse');
+        const cameraYawLocation = gl.getUniformLocation(program, 'u_cameraYaw');
+        const cameraPitchLocation = gl.getUniformLocation(program, 'u_cameraPitch');
+        const cameraOffsetLocation = gl.getUniformLocation(program, 'u_cameraOffset');
 
         const startTime = Date.now();
 
         function render() {
             const currentTime = (Date.now() - startTime) / 1000;
 
+            // Otomatik ileri hareket - Sonsuz uçuş
+            const speed = 0.3; // Yavaş hareket
+            const cameraZ = currentTime * speed;
+            const cameraY = -0.5 + Math.sin(currentTime * 0.1) * 0.2; // Hafif yukarı-aşağı
+            const cameraX = Math.sin(currentTime * 0.05) * 0.3; // Hafif sağa-sola
+
             gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
             gl.uniform1f(timeLocation, currentTime);
-            gl.uniform2f(mouseLocation, mouseX * canvas.width, mouseY * canvas.height);
+            gl.uniform1f(cameraYawLocation, cameraYaw);
+            gl.uniform1f(cameraPitchLocation, cameraPitch);
+            gl.uniform3f(cameraOffsetLocation, cameraX, cameraY, cameraZ);
 
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
