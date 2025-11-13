@@ -63,9 +63,18 @@
         // Kamera kontrolü için değişkenler
         let cameraYaw = 0.0;
         let cameraPitch = 0.3;
+        let cameraZoom = 1.0; // Zoom seviyesi
         let isDragging = false;
         let lastMouseX = 0;
         let lastMouseY = 0;
+
+        // Mouse wheel ile zoom kontrolü
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomSpeed = 0.001;
+            cameraZoom *= (1 - e.deltaY * zoomSpeed);
+            cameraZoom = Math.max(0.3, Math.min(3.0, cameraZoom)); // 0.3x - 3.0x zoom
+        }, { passive: false });
 
         // Mouse ile kamera kontrolü (sürükle-bırak)
         canvas.addEventListener('mousedown', (e) => {
@@ -114,6 +123,7 @@
             uniform float u_cameraYaw;
             uniform float u_cameraPitch;
             uniform vec3 u_cameraOffset;
+            uniform float u_cameraZoom;
 
             mat3 setCamera(vec3 ro, vec3 ta, float cr) {
                 vec3 cw = normalize(ta - ro);
@@ -145,11 +155,11 @@
                     f.z) * 2.0 - 1.0;
             }
 
-            // 9 oktavlı FBM - En detaylı bulutlar için
+            // 30 oktavlı FBM - Ultra detaylı bulutlar için
             float fbm(vec3 p) {
                 float f = 0.0;
                 float a = 0.5;
-                for(int i = 0; i < 9; i++) {
+                for(int i = 0; i < 30; i++) {
                     f += a * noise(p);
                     p = p * 2.03;
                     a *= 0.5;
@@ -158,59 +168,67 @@
             }
 
             float map5(vec3 p) {
-                vec3 q = p - vec3(0.0, 0.1, 1.0) * u_time * 0.08;
+                // Daha fazla bulut için ölçek artırıldı
+                vec3 q = p * 0.4 - vec3(0.0, 0.1, 1.0) * u_time * 0.08;
                 float f = fbm(q);
-                return clamp(1.5 - p.y - 2.0 + 1.75 * f, 0.0, 1.0);
+                return clamp(2.5 - p.y - 1.0 + 2.2 * f, 0.0, 1.0);
             }
 
             float map4(vec3 p) {
-                vec3 q = p - vec3(0.0, 0.1, 1.0) * u_time * 0.08;
+                vec3 q = p * 0.4 - vec3(0.0, 0.1, 1.0) * u_time * 0.08;
                 float f = 0.5 * noise(q); q = q * 2.02;
                 f += 0.25 * noise(q); q = q * 2.03;
                 f += 0.125 * noise(q); q = q * 2.01;
                 f += 0.0625 * noise(q);
-                return clamp(1.5 - p.y - 2.0 + 1.75 * f, 0.0, 1.0);
+                return clamp(2.5 - p.y - 1.0 + 2.2 * f, 0.0, 1.0);
             }
 
             float map3(vec3 p) {
-                vec3 q = p - vec3(0.0, 0.1, 1.0) * u_time * 0.08;
+                vec3 q = p * 0.4 - vec3(0.0, 0.1, 1.0) * u_time * 0.08;
                 float f = 0.5 * noise(q); q = q * 2.02;
                 f += 0.25 * noise(q); q = q * 2.03;
                 f += 0.125 * noise(q);
-                return clamp(1.5 - p.y - 2.0 + 1.75 * f, 0.0, 1.0);
+                return clamp(2.5 - p.y - 1.0 + 2.2 * f, 0.0, 1.0);
             }
 
             float map2(vec3 p) {
-                vec3 q = p - vec3(0.0, 0.1, 1.0) * u_time * 0.08;
+                vec3 q = p * 0.4 - vec3(0.0, 0.1, 1.0) * u_time * 0.08;
                 float f = 0.5 * noise(q); q = q * 2.02;
                 f += 0.25 * noise(q);
-                return clamp(1.5 - p.y - 2.0 + 1.75 * f, 0.0, 1.0);
+                return clamp(2.5 - p.y - 1.0 + 2.2 * f, 0.0, 1.0);
             }
 
             vec3 calculateLighting(vec3 pos, float den, vec3 sundir, float t) {
-                // Performans: Shadow sampling azaltıldı (4->3)
+                // Gelişmiş gölge sistemi - 6 sample
                 float shadow = 0.0;
-                float st = 0.15;
-                for(int i = 0; i < 3; i++) {
+                float st = 0.1;
+                for(int i = 0; i < 6; i++) {
                     shadow += map3(pos + sundir * st);
-                    st += 0.25;
+                    st += 0.18;
                 }
-                shadow = exp(-shadow * 0.75);
-                
-                float ao = 1.0 - den * 0.4;
-                
-                vec3 sunColor = vec3(1.6, 0.5, 0.35) * 3.2;
-                vec3 skyColor = vec3(0.95, 0.35, 0.65) * 1.6;
-                vec3 ambientColor = vec3(1.3, 0.65, 0.55) * 1.1;
-                
+                shadow = exp(-shadow * 0.85);
+
+                // Ambient occlusion - Daha detaylı
+                float ao = 1.0 - den * 0.5;
+                ao = pow(ao, 1.2);
+
+                // Çoklu ışık kaynakları
+                vec3 sunColor = vec3(1.6, 0.5, 0.35) * 3.5;
+                vec3 skyColor = vec3(0.95, 0.35, 0.65) * 2.0;
+                vec3 ambientColor = vec3(1.3, 0.65, 0.55) * 1.3;
+                vec3 backLight = vec3(0.8, 0.4, 0.6) * 1.5; // Arka ışık
+
+                // Mie scattering - Daha gerçekçi
                 float cosTheta = dot(normalize(sundir), normalize(pos));
-                float g = 0.6;
+                float g = 0.65;
                 float phase = (1.0 - g * g) / (4.0 * 3.14159 * pow(1.0 + g * g - 2.0 * g * cosTheta, 1.5));
-                
-                vec3 light = sunColor * shadow * phase * 1.8;
-                light += skyColor * ao * 0.85;
-                light += ambientColor * (0.55 + 0.35 * den);
-                
+
+                // Işık birleştirme
+                vec3 light = sunColor * shadow * phase * 2.0;
+                light += skyColor * ao * 1.0;
+                light += ambientColor * (0.6 + 0.4 * den);
+                light += backLight * (1.0 - shadow) * 0.3; // Arka ışık katkısı
+
                 return light;
             }
 
@@ -229,41 +247,103 @@
                         vec3 light = calculateLighting(pos, den, sundir, t);
 
                         float denFactor = smoothstep(0.0, 1.0, den);
-                        // x3 daha fazla ton - Zengin renk geçişleri
-                        vec3 cloudBase = vec3(1.9, 0.85, 0.55);
-                        vec3 cloudLight1 = vec3(1.85, 0.8, 0.53);
-                        vec3 cloudLight2 = vec3(1.8, 0.75, 0.5);
-                        vec3 cloudMid1 = vec3(1.7, 0.65, 0.45);
-                        vec3 cloudMid2 = vec3(1.6, 0.6, 0.48);
-                        vec3 cloudMid3 = vec3(1.5, 0.55, 0.5);
-                        vec3 cloudMid4 = vec3(1.4, 0.5, 0.5);
-                        vec3 cloudMid5 = vec3(1.2, 0.45, 0.52);
-                        vec3 cloudMid6 = vec3(1.0, 0.4, 0.52);
-                        vec3 cloudDark1 = vec3(0.8, 0.35, 0.5);
-                        vec3 cloudDark2 = vec3(0.7, 0.32, 0.48);
-                        vec3 cloudDark3 = vec3(0.6, 0.28, 0.46);
-                        vec3 cloudDark4 = vec3(0.55, 0.25, 0.45);
-                        vec3 cloudDark5 = vec3(0.5, 0.23, 0.43);
-                        vec3 cloudDeep1 = vec3(0.45, 0.2, 0.4);
-                        vec3 cloudDeep2 = vec3(0.4, 0.18, 0.38);
-                        vec3 cloudDeep3 = vec3(0.35, 0.16, 0.36);
+                        // 48 ultra zengin bulut tonu
+                        vec3 c1 = vec3(2.0, 0.9, 0.6);
+                        vec3 c2 = vec3(1.95, 0.88, 0.58);
+                        vec3 c3 = vec3(1.9, 0.85, 0.55);
+                        vec3 c4 = vec3(1.87, 0.83, 0.54);
+                        vec3 c5 = vec3(1.85, 0.8, 0.53);
+                        vec3 c6 = vec3(1.82, 0.78, 0.52);
+                        vec3 c7 = vec3(1.8, 0.75, 0.5);
+                        vec3 c8 = vec3(1.77, 0.73, 0.49);
+                        vec3 c9 = vec3(1.75, 0.7, 0.48);
+                        vec3 c10 = vec3(1.72, 0.68, 0.47);
+                        vec3 c11 = vec3(1.7, 0.65, 0.45);
+                        vec3 c12 = vec3(1.67, 0.63, 0.46);
+                        vec3 c13 = vec3(1.65, 0.62, 0.47);
+                        vec3 c14 = vec3(1.62, 0.61, 0.475);
+                        vec3 c15 = vec3(1.6, 0.6, 0.48);
+                        vec3 c16 = vec3(1.57, 0.58, 0.485);
+                        vec3 c17 = vec3(1.55, 0.57, 0.49);
+                        vec3 c18 = vec3(1.52, 0.56, 0.495);
+                        vec3 c19 = vec3(1.5, 0.55, 0.5);
+                        vec3 c20 = vec3(1.47, 0.53, 0.505);
+                        vec3 c21 = vec3(1.45, 0.52, 0.51);
+                        vec3 c22 = vec3(1.42, 0.51, 0.515);
+                        vec3 c23 = vec3(1.4, 0.5, 0.5);
+                        vec3 c24 = vec3(1.35, 0.49, 0.51);
+                        vec3 c25 = vec3(1.3, 0.48, 0.515);
+                        vec3 c26 = vec3(1.25, 0.47, 0.52);
+                        vec3 c27 = vec3(1.2, 0.45, 0.52);
+                        vec3 c28 = vec3(1.15, 0.44, 0.52);
+                        vec3 c29 = vec3(1.1, 0.43, 0.52);
+                        vec3 c30 = vec3(1.05, 0.42, 0.52);
+                        vec3 c31 = vec3(1.0, 0.4, 0.52);
+                        vec3 c32 = vec3(0.95, 0.39, 0.515);
+                        vec3 c33 = vec3(0.9, 0.37, 0.51);
+                        vec3 c34 = vec3(0.85, 0.36, 0.505);
+                        vec3 c35 = vec3(0.8, 0.35, 0.5);
+                        vec3 c36 = vec3(0.76, 0.34, 0.49);
+                        vec3 c37 = vec3(0.72, 0.33, 0.485);
+                        vec3 c38 = vec3(0.7, 0.32, 0.48);
+                        vec3 c39 = vec3(0.67, 0.31, 0.475);
+                        vec3 c40 = vec3(0.64, 0.3, 0.47);
+                        vec3 c41 = vec3(0.62, 0.29, 0.465);
+                        vec3 c42 = vec3(0.6, 0.28, 0.46);
+                        vec3 c43 = vec3(0.57, 0.27, 0.455);
+                        vec3 c44 = vec3(0.55, 0.25, 0.45);
+                        vec3 c45 = vec3(0.52, 0.24, 0.44);
+                        vec3 c46 = vec3(0.5, 0.23, 0.43);
+                        vec3 c47 = vec3(0.47, 0.21, 0.42);
+                        vec3 c48 = vec3(0.45, 0.2, 0.4);
 
-                        vec3 cloudColor = mix(cloudBase, cloudLight1, denFactor * 0.1);
-                        cloudColor = mix(cloudColor, cloudLight2, denFactor * 0.2);
-                        cloudColor = mix(cloudColor, cloudMid1, denFactor * 0.3);
-                        cloudColor = mix(cloudColor, cloudMid2, denFactor * 0.35);
-                        cloudColor = mix(cloudColor, cloudMid3, denFactor * 0.4);
-                        cloudColor = mix(cloudColor, cloudMid4, denFactor * 0.5);
-                        cloudColor = mix(cloudColor, cloudMid5, denFactor * 0.55);
-                        cloudColor = mix(cloudColor, cloudMid6, denFactor * 0.6);
-                        cloudColor = mix(cloudColor, cloudDark1, denFactor * 0.7);
-                        cloudColor = mix(cloudColor, cloudDark2, denFactor * 0.75);
-                        cloudColor = mix(cloudColor, cloudDark3, denFactor * 0.8);
-                        cloudColor = mix(cloudColor, cloudDark4, denFactor * 0.85);
-                        cloudColor = mix(cloudColor, cloudDark5, denFactor * 0.9);
-                        cloudColor = mix(cloudColor, cloudDeep1, denFactor * 0.95);
-                        cloudColor = mix(cloudColor, cloudDeep2, denFactor * 0.97);
-                        cloudColor = mix(cloudColor, cloudDeep3, denFactor * 0.99);
+                        vec3 cloudColor = mix(c1, c2, denFactor * 0.02);
+                        cloudColor = mix(cloudColor, c3, denFactor * 0.04);
+                        cloudColor = mix(cloudColor, c4, denFactor * 0.06);
+                        cloudColor = mix(cloudColor, c5, denFactor * 0.08);
+                        cloudColor = mix(cloudColor, c6, denFactor * 0.1);
+                        cloudColor = mix(cloudColor, c7, denFactor * 0.12);
+                        cloudColor = mix(cloudColor, c8, denFactor * 0.14);
+                        cloudColor = mix(cloudColor, c9, denFactor * 0.16);
+                        cloudColor = mix(cloudColor, c10, denFactor * 0.18);
+                        cloudColor = mix(cloudColor, c11, denFactor * 0.2);
+                        cloudColor = mix(cloudColor, c12, denFactor * 0.22);
+                        cloudColor = mix(cloudColor, c13, denFactor * 0.24);
+                        cloudColor = mix(cloudColor, c14, denFactor * 0.26);
+                        cloudColor = mix(cloudColor, c15, denFactor * 0.28);
+                        cloudColor = mix(cloudColor, c16, denFactor * 0.3);
+                        cloudColor = mix(cloudColor, c17, denFactor * 0.32);
+                        cloudColor = mix(cloudColor, c18, denFactor * 0.34);
+                        cloudColor = mix(cloudColor, c19, denFactor * 0.36);
+                        cloudColor = mix(cloudColor, c20, denFactor * 0.38);
+                        cloudColor = mix(cloudColor, c21, denFactor * 0.4);
+                        cloudColor = mix(cloudColor, c22, denFactor * 0.42);
+                        cloudColor = mix(cloudColor, c23, denFactor * 0.44);
+                        cloudColor = mix(cloudColor, c24, denFactor * 0.46);
+                        cloudColor = mix(cloudColor, c25, denFactor * 0.48);
+                        cloudColor = mix(cloudColor, c26, denFactor * 0.5);
+                        cloudColor = mix(cloudColor, c27, denFactor * 0.52);
+                        cloudColor = mix(cloudColor, c28, denFactor * 0.54);
+                        cloudColor = mix(cloudColor, c29, denFactor * 0.56);
+                        cloudColor = mix(cloudColor, c30, denFactor * 0.58);
+                        cloudColor = mix(cloudColor, c31, denFactor * 0.6);
+                        cloudColor = mix(cloudColor, c32, denFactor * 0.62);
+                        cloudColor = mix(cloudColor, c33, denFactor * 0.64);
+                        cloudColor = mix(cloudColor, c34, denFactor * 0.66);
+                        cloudColor = mix(cloudColor, c35, denFactor * 0.68);
+                        cloudColor = mix(cloudColor, c36, denFactor * 0.7);
+                        cloudColor = mix(cloudColor, c37, denFactor * 0.72);
+                        cloudColor = mix(cloudColor, c38, denFactor * 0.74);
+                        cloudColor = mix(cloudColor, c39, denFactor * 0.76);
+                        cloudColor = mix(cloudColor, c40, denFactor * 0.78);
+                        cloudColor = mix(cloudColor, c41, denFactor * 0.8);
+                        cloudColor = mix(cloudColor, c42, denFactor * 0.82);
+                        cloudColor = mix(cloudColor, c43, denFactor * 0.84);
+                        cloudColor = mix(cloudColor, c44, denFactor * 0.86);
+                        cloudColor = mix(cloudColor, c45, denFactor * 0.88);
+                        cloudColor = mix(cloudColor, c46, denFactor * 0.9);
+                        cloudColor = mix(cloudColor, c47, denFactor * 0.95);
+                        cloudColor = mix(cloudColor, c48, denFactor * 0.99);
                         
                         vec4 col = vec4(cloudColor * light, den);
                         col.xyz = mix(col.xyz, bgcol, 1.0 - exp(-0.0018 * t * t));
@@ -323,41 +403,76 @@
 
                 vec3 ta = ro + lookDir * 5.0;
                 mat3 ca = setCamera(ro, ta, 0.05 * cos(0.25 * u_time));
-                vec3 rd = ca * normalize(vec3(p.xy, 1.5));
+
+                // Zoom kontrolü - FOV ayarı
+                float fov = 1.5 / u_cameraZoom;
+                vec3 rd = ca * normalize(vec3(p.xy, fov));
                 
                 vec3 sundir = normalize(vec3(-0.6, 0.5, -0.8));
                 float sun = clamp(dot(sundir, rd), 0.0, 1.0);
                 
                 float skyGradient = pow(1.0 - max(rd.y, 0.0), 1.3);
-                // x3 daha fazla gökyüzü tonu - Zengin geçişler
-                vec3 skyHorizon = vec3(0.9, 0.4, 0.65);
-                vec3 skyLow1 = vec3(0.95, 0.42, 0.62);
-                vec3 skyLow2 = vec3(1.0, 0.43, 0.6);
-                vec3 skyMid1 = vec3(1.1, 0.45, 0.55);
-                vec3 skyMid2 = vec3(1.15, 0.46, 0.52);
-                vec3 skyMid3 = vec3(1.2, 0.48, 0.48);
-                vec3 skyMid4 = vec3(1.3, 0.5, 0.45);
-                vec3 skyMid5 = vec3(1.35, 0.51, 0.42);
-                vec3 skyMid6 = vec3(1.4, 0.53, 0.4);
-                vec3 skyHigh1 = vec3(1.45, 0.54, 0.37);
-                vec3 skyHigh2 = vec3(1.5, 0.55, 0.35);
-                vec3 skyHigh3 = vec3(1.53, 0.53, 0.33);
-                vec3 skyZenith1 = vec3(1.56, 0.51, 0.31);
-                vec3 skyZenith2 = vec3(1.6, 0.5, 0.3);
+                // 30 ultra zengin gökyüzü tonu
+                vec3 s1 = vec3(0.85, 0.38, 0.68);
+                vec3 s2 = vec3(0.88, 0.39, 0.66);
+                vec3 s3 = vec3(0.9, 0.4, 0.65);
+                vec3 s4 = vec3(0.92, 0.405, 0.64);
+                vec3 s5 = vec3(0.95, 0.42, 0.62);
+                vec3 s6 = vec3(0.97, 0.425, 0.61);
+                vec3 s7 = vec3(1.0, 0.43, 0.6);
+                vec3 s8 = vec3(1.03, 0.435, 0.59);
+                vec3 s9 = vec3(1.05, 0.44, 0.575);
+                vec3 s10 = vec3(1.08, 0.445, 0.56);
+                vec3 s11 = vec3(1.1, 0.45, 0.55);
+                vec3 s12 = vec3(1.12, 0.455, 0.54);
+                vec3 s13 = vec3(1.15, 0.46, 0.52);
+                vec3 s14 = vec3(1.17, 0.47, 0.51);
+                vec3 s15 = vec3(1.2, 0.48, 0.48);
+                vec3 s16 = vec3(1.23, 0.485, 0.47);
+                vec3 s17 = vec3(1.25, 0.49, 0.46);
+                vec3 s18 = vec3(1.28, 0.495, 0.455);
+                vec3 s19 = vec3(1.3, 0.5, 0.45);
+                vec3 s20 = vec3(1.32, 0.505, 0.44);
+                vec3 s21 = vec3(1.35, 0.51, 0.42);
+                vec3 s22 = vec3(1.37, 0.52, 0.41);
+                vec3 s23 = vec3(1.4, 0.53, 0.4);
+                vec3 s24 = vec3(1.42, 0.535, 0.39);
+                vec3 s25 = vec3(1.45, 0.54, 0.37);
+                vec3 s26 = vec3(1.47, 0.545, 0.36);
+                vec3 s27 = vec3(1.5, 0.55, 0.35);
+                vec3 s28 = vec3(1.53, 0.53, 0.33);
+                vec3 s29 = vec3(1.56, 0.51, 0.31);
+                vec3 s30 = vec3(1.6, 0.5, 0.3);
 
-                vec3 col = mix(skyHorizon, skyLow1, skyGradient * 0.15);
-                col = mix(col, skyLow2, skyGradient * 0.25);
-                col = mix(col, skyMid1, skyGradient * 0.35);
-                col = mix(col, skyMid2, skyGradient * 0.42);
-                col = mix(col, skyMid3, skyGradient * 0.48);
-                col = mix(col, skyMid4, skyGradient * 0.55);
-                col = mix(col, skyMid5, skyGradient * 0.62);
-                col = mix(col, skyMid6, skyGradient * 0.68);
-                col = mix(col, skyHigh1, skyGradient * 0.75);
-                col = mix(col, skyHigh2, skyGradient * 0.82);
-                col = mix(col, skyHigh3, skyGradient * 0.9);
-                col = mix(col, skyZenith1, skyGradient * 0.95);
-                col = mix(col, skyZenith2, skyGradient);
+                vec3 col = mix(s1, s2, skyGradient * 0.033);
+                col = mix(col, s3, skyGradient * 0.067);
+                col = mix(col, s4, skyGradient * 0.1);
+                col = mix(col, s5, skyGradient * 0.133);
+                col = mix(col, s6, skyGradient * 0.167);
+                col = mix(col, s7, skyGradient * 0.2);
+                col = mix(col, s8, skyGradient * 0.233);
+                col = mix(col, s9, skyGradient * 0.267);
+                col = mix(col, s10, skyGradient * 0.3);
+                col = mix(col, s11, skyGradient * 0.333);
+                col = mix(col, s12, skyGradient * 0.367);
+                col = mix(col, s13, skyGradient * 0.4);
+                col = mix(col, s14, skyGradient * 0.433);
+                col = mix(col, s15, skyGradient * 0.467);
+                col = mix(col, s16, skyGradient * 0.5);
+                col = mix(col, s17, skyGradient * 0.533);
+                col = mix(col, s18, skyGradient * 0.567);
+                col = mix(col, s19, skyGradient * 0.6);
+                col = mix(col, s20, skyGradient * 0.633);
+                col = mix(col, s21, skyGradient * 0.667);
+                col = mix(col, s22, skyGradient * 0.7);
+                col = mix(col, s23, skyGradient * 0.733);
+                col = mix(col, s24, skyGradient * 0.767);
+                col = mix(col, s25, skyGradient * 0.8);
+                col = mix(col, s26, skyGradient * 0.833);
+                col = mix(col, s27, skyGradient * 0.867);
+                col = mix(col, s28, skyGradient * 0.9);
+                col = mix(col, s29, skyGradient * 0.95);
+                col = mix(col, s30, skyGradient);
                 
                 col += vec3(1.9, 0.65, 0.35) * pow(sun, 12.0) * 0.7;
                 col += vec3(1.7, 0.5, 0.4) * pow(sun, 6.0) * 0.5;
@@ -423,23 +538,25 @@
         const cameraYawLocation = gl.getUniformLocation(program, 'u_cameraYaw');
         const cameraPitchLocation = gl.getUniformLocation(program, 'u_cameraPitch');
         const cameraOffsetLocation = gl.getUniformLocation(program, 'u_cameraOffset');
+        const cameraZoomLocation = gl.getUniformLocation(program, 'u_cameraZoom');
 
         const startTime = Date.now();
 
         function render() {
             const currentTime = (Date.now() - startTime) / 1000;
 
-            // Otomatik ileri hareket - Sonsuz uçuş
-            const speed = 0.3; // Yavaş hareket
+            // Daha hızlı ve dinamik uçuş hareketi
+            const speed = 0.8; // Daha hızlı ileri hareket
             const cameraZ = currentTime * speed;
-            const cameraY = -0.5 + Math.sin(currentTime * 0.1) * 0.2; // Hafif yukarı-aşağı
-            const cameraX = Math.sin(currentTime * 0.05) * 0.3; // Hafif sağa-sola
+            const cameraY = -0.3 + Math.sin(currentTime * 0.15) * 0.4; // Daha belirgin yukarı-aşağı
+            const cameraX = Math.sin(currentTime * 0.08) * 0.5; // Daha belirgin sağa-sola
 
             gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
             gl.uniform1f(timeLocation, currentTime);
             gl.uniform1f(cameraYawLocation, cameraYaw);
             gl.uniform1f(cameraPitchLocation, cameraPitch);
             gl.uniform3f(cameraOffsetLocation, cameraX, cameraY, cameraZ);
+            gl.uniform1f(cameraZoomLocation, cameraZoom);
 
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
