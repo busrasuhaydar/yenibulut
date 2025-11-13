@@ -205,11 +205,11 @@
 
                 float ao = 1.0 - den * 0.5;
 
-                // Softer lighting colors - reduced brightness
-                vec3 sunColor = vec3(1.2, 0.4, 0.3) * 2.2;
-                vec3 skyColor = vec3(0.7, 0.25, 0.5) * 1.3;
-                vec3 ambientColor = vec3(0.9, 0.5, 0.45) * 0.9;
-                vec3 backLight = vec3(0.6, 0.3, 0.55) * 1.0;
+                // Balanced lighting - realistic but not too bright
+                vec3 sunColor = vec3(1.4, 0.5, 0.35) * 2.8;
+                vec3 skyColor = vec3(0.85, 0.35, 0.6) * 1.6;
+                vec3 ambientColor = vec3(1.1, 0.6, 0.5) * 1.1;
+                vec3 backLight = vec3(0.7, 0.35, 0.6) * 1.3;
 
                 float cosTheta = dot(normalize(sundir), normalize(pos));
                 float g = 0.65;
@@ -235,31 +235,33 @@
                     float den = map5(pos);
                     if(den > 0.01) {
                         vec3 light = calculateLighting(pos, den, sundir, bgcol, t);
-                        // Soft pink and white tones - 8 variations
-                        vec3 white1 = vec3(0.95, 0.93, 0.95);  // Pure soft white
-                        vec3 white2 = vec3(0.98, 0.88, 0.92);  // Pink-tinted white
-                        vec3 pink1 = vec3(0.95, 0.75, 0.80);   // Very soft pink
-                        vec3 pink2 = vec3(0.90, 0.65, 0.75);   // Light pink
-                        vec3 pink3 = vec3(0.85, 0.55, 0.70);   // Medium soft pink
-                        vec3 pink4 = vec3(0.75, 0.45, 0.65);   // Deeper pink
-                        vec3 pink5 = vec3(0.65, 0.35, 0.60);   // Rich pink
-                        vec3 shadow = vec3(0.45, 0.25, 0.50);  // Pink shadow
+                        // Bright whites and vivid pinks - 8 variations
+                        vec3 white1 = vec3(1.55, 1.50, 1.52);  // Bright pure white
+                        vec3 white2 = vec3(1.45, 1.35, 1.40);  // Soft white
+                        vec3 white3 = vec3(1.35, 1.20, 1.28);  // Pink-tinted white
+                        vec3 pink1 = vec3(1.25, 0.95, 1.05);   // Very light pink
+                        vec3 pink2 = vec3(1.15, 0.80, 0.95);   // Light pink
+                        vec3 pink3 = vec3(1.00, 0.68, 0.85);   // Medium pink
+                        vec3 pink4 = vec3(0.85, 0.55, 0.75);   // Deeper pink
+                        vec3 pink5 = vec3(0.70, 0.45, 0.65);   // Rich pink
 
-                        float t1 = smoothstep(0.0, 0.15, den);
-                        float t2 = smoothstep(0.15, 0.35, den);
-                        float t3 = smoothstep(0.35, 0.55, den);
-                        float t4 = smoothstep(0.55, 0.75, den);
-                        float t5 = smoothstep(0.75, 1.0, den);
+                        float t1 = smoothstep(0.0, 0.12, den);
+                        float t2 = smoothstep(0.12, 0.25, den);
+                        float t3 = smoothstep(0.25, 0.40, den);
+                        float t4 = smoothstep(0.40, 0.60, den);
+                        float t5 = smoothstep(0.60, 0.80, den);
+                        float t6 = smoothstep(0.80, 1.0, den);
 
                         vec3 cloudColor = mix(white1, white2, t1);
-                        cloudColor = mix(cloudColor, pink1, t2);
-                        cloudColor = mix(cloudColor, pink2, t3);
-                        cloudColor = mix(cloudColor, pink3, t4);
-                        cloudColor = mix(cloudColor, pink4, t5);
+                        cloudColor = mix(cloudColor, white3, t2);
+                        cloudColor = mix(cloudColor, pink1, t3);
+                        cloudColor = mix(cloudColor, pink2, t4);
+                        cloudColor = mix(cloudColor, pink3, t5);
+                        cloudColor = mix(cloudColor, pink4, t6);
 
-                        // Position-based variation
+                        // Position-based variation adds more pink
                         float variation = sin(pos.x * 0.3) * cos(pos.z * 0.4);
-                        cloudColor = mix(cloudColor, pink5, variation * 0.15);
+                        cloudColor = mix(cloudColor, pink5, variation * 0.12);
 
                         vec4 col = vec4(cloudColor * light, den);
                         col.xyz = mix(col.xyz, bgcol, 1.0 - exp(-0.002 * t * t));
@@ -277,27 +279,29 @@
                     float den = map4(pos);
                     if(den > 0.01) {
                         vec3 light = calculateLighting(pos, den, sundir, bgcol, t);
-                        // Second layer - slightly warmer pink/white tones
-                        vec3 white1 = vec3(0.96, 0.90, 0.93);
-                        vec3 white2 = vec3(0.92, 0.82, 0.88);
-                        vec3 pink1 = vec3(0.88, 0.70, 0.78);
-                        vec3 pink2 = vec3(0.82, 0.60, 0.72);
-                        vec3 pink3 = vec3(0.76, 0.50, 0.68);
-                        vec3 pink4 = vec3(0.68, 0.40, 0.62);
-                        vec3 pink5 = vec3(0.60, 0.32, 0.58);
+                        // Second layer - bright whites with warm pinks
+                        vec3 white1 = vec3(1.50, 1.45, 1.48);
+                        vec3 white2 = vec3(1.40, 1.30, 1.35);
+                        vec3 white3 = vec3(1.30, 1.15, 1.22);
+                        vec3 pink1 = vec3(1.20, 0.90, 1.00);
+                        vec3 pink2 = vec3(1.05, 0.75, 0.88);
+                        vec3 pink3 = vec3(0.90, 0.62, 0.78);
+                        vec3 pink4 = vec3(0.75, 0.50, 0.68);
 
-                        float t1 = smoothstep(0.0, 0.15, den);
-                        float t2 = smoothstep(0.15, 0.35, den);
-                        float t3 = smoothstep(0.35, 0.55, den);
-                        float t4 = smoothstep(0.55, 0.75, den);
+                        float t1 = smoothstep(0.0, 0.12, den);
+                        float t2 = smoothstep(0.12, 0.25, den);
+                        float t3 = smoothstep(0.25, 0.42, den);
+                        float t4 = smoothstep(0.42, 0.62, den);
+                        float t5 = smoothstep(0.62, 0.82, den);
 
                         vec3 cloudColor = mix(white1, white2, t1);
-                        cloudColor = mix(cloudColor, pink1, t2);
-                        cloudColor = mix(cloudColor, pink2, t3);
-                        cloudColor = mix(cloudColor, pink3, t4);
+                        cloudColor = mix(cloudColor, white3, t2);
+                        cloudColor = mix(cloudColor, pink1, t3);
+                        cloudColor = mix(cloudColor, pink2, t4);
+                        cloudColor = mix(cloudColor, pink3, t5);
 
                         float variation = cos(pos.z * 0.35) * sin(pos.y * 0.25);
-                        cloudColor = mix(cloudColor, pink4, variation * 0.12);
+                        cloudColor = mix(cloudColor, pink4, variation * 0.1);
 
                         vec4 col = vec4(cloudColor * light, den);
                         col.xyz = mix(col.xyz, bgcol, 1.0 - exp(-0.002 * t * t));
@@ -315,27 +319,29 @@
                     float den = map3(pos);
                     if(den > 0.01) {
                         vec3 light = calculateLighting(pos, den, sundir, bgcol, t);
-                        // Third layer - rosy pink/white tones
-                        vec3 white1 = vec3(0.94, 0.87, 0.90);
-                        vec3 white2 = vec3(0.90, 0.78, 0.85);
-                        vec3 pink1 = vec3(0.85, 0.68, 0.76);
-                        vec3 pink2 = vec3(0.78, 0.58, 0.70);
-                        vec3 pink3 = vec3(0.72, 0.48, 0.65);
-                        vec3 pink4 = vec3(0.64, 0.38, 0.60);
-                        vec3 pink5 = vec3(0.56, 0.30, 0.55);
+                        // Third layer - rosy whites and pinks
+                        vec3 white1 = vec3(1.45, 1.38, 1.42);
+                        vec3 white2 = vec3(1.35, 1.22, 1.30);
+                        vec3 white3 = vec3(1.25, 1.08, 1.18);
+                        vec3 pink1 = vec3(1.12, 0.85, 0.95);
+                        vec3 pink2 = vec3(0.98, 0.70, 0.82);
+                        vec3 pink3 = vec3(0.85, 0.58, 0.72);
+                        vec3 pink4 = vec3(0.70, 0.48, 0.62);
 
-                        float t1 = smoothstep(0.0, 0.15, den);
-                        float t2 = smoothstep(0.15, 0.35, den);
-                        float t3 = smoothstep(0.35, 0.55, den);
-                        float t4 = smoothstep(0.55, 0.75, den);
+                        float t1 = smoothstep(0.0, 0.12, den);
+                        float t2 = smoothstep(0.12, 0.28, den);
+                        float t3 = smoothstep(0.28, 0.45, den);
+                        float t4 = smoothstep(0.45, 0.65, den);
+                        float t5 = smoothstep(0.65, 0.85, den);
 
                         vec3 cloudColor = mix(white1, white2, t1);
-                        cloudColor = mix(cloudColor, pink1, t2);
-                        cloudColor = mix(cloudColor, pink2, t3);
-                        cloudColor = mix(cloudColor, pink3, t4);
+                        cloudColor = mix(cloudColor, white3, t2);
+                        cloudColor = mix(cloudColor, pink1, t3);
+                        cloudColor = mix(cloudColor, pink2, t4);
+                        cloudColor = mix(cloudColor, pink3, t5);
 
                         float variation = sin(pos.y * 0.5) * cos(pos.x * 0.3);
-                        cloudColor = mix(cloudColor, pink4, variation * 0.1);
+                        cloudColor = mix(cloudColor, pink4, variation * 0.08);
 
                         vec4 col = vec4(cloudColor * light, den);
                         col.xyz = mix(col.xyz, bgcol, 1.0 - exp(-0.002 * t * t));
@@ -353,27 +359,29 @@
                     float den = map2(pos);
                     if(den > 0.01) {
                         vec3 light = calculateLighting(pos, den, sundir, bgcol, t);
-                        // Fourth layer - distant soft pink/white tones
-                        vec3 white1 = vec3(0.92, 0.84, 0.88);
-                        vec3 white2 = vec3(0.88, 0.75, 0.82);
-                        vec3 pink1 = vec3(0.82, 0.65, 0.74);
-                        vec3 pink2 = vec3(0.75, 0.55, 0.68);
-                        vec3 pink3 = vec3(0.68, 0.45, 0.62);
-                        vec3 pink4 = vec3(0.60, 0.36, 0.58);
-                        vec3 pink5 = vec3(0.52, 0.28, 0.52);
+                        // Fourth layer - distant bright whites and pinks
+                        vec3 white1 = vec3(1.40, 1.32, 1.36);
+                        vec3 white2 = vec3(1.30, 1.18, 1.25);
+                        vec3 white3 = vec3(1.20, 1.02, 1.12);
+                        vec3 pink1 = vec3(1.08, 0.80, 0.90);
+                        vec3 pink2 = vec3(0.92, 0.65, 0.78);
+                        vec3 pink3 = vec3(0.78, 0.52, 0.68);
+                        vec3 pink4 = vec3(0.65, 0.42, 0.58);
 
-                        float t1 = smoothstep(0.0, 0.15, den);
-                        float t2 = smoothstep(0.15, 0.35, den);
-                        float t3 = smoothstep(0.35, 0.55, den);
-                        float t4 = smoothstep(0.55, 0.75, den);
+                        float t1 = smoothstep(0.0, 0.14, den);
+                        float t2 = smoothstep(0.14, 0.30, den);
+                        float t3 = smoothstep(0.30, 0.50, den);
+                        float t4 = smoothstep(0.50, 0.70, den);
+                        float t5 = smoothstep(0.70, 0.88, den);
 
                         vec3 cloudColor = mix(white1, white2, t1);
-                        cloudColor = mix(cloudColor, pink1, t2);
-                        cloudColor = mix(cloudColor, pink2, t3);
-                        cloudColor = mix(cloudColor, pink3, t4);
+                        cloudColor = mix(cloudColor, white3, t2);
+                        cloudColor = mix(cloudColor, pink1, t3);
+                        cloudColor = mix(cloudColor, pink2, t4);
+                        cloudColor = mix(cloudColor, pink3, t5);
 
                         float variation = cos(pos.x * 0.25 + pos.z * 0.25);
-                        cloudColor = mix(cloudColor, pink4, variation * 0.08);
+                        cloudColor = mix(cloudColor, pink4, variation * 0.06);
 
                         vec4 col = vec4(cloudColor * light, den);
                         col.xyz = mix(col.xyz, bgcol, 1.0 - exp(-0.002 * t * t));
@@ -399,38 +407,38 @@
                 vec3 sundir = normalize(vec3(-0.6, 0.5, -0.8));
                 float sun = clamp(dot(sundir, rd), 0.0, 1.0);
 
-                // Rich orange gradient with 8+ tones
-                float skyGradient = pow(1.0 - max(rd.y, 0.0), 1.2);
+                // Beautiful purple-pink-orange gradient (less yellow!)
+                float skyGradient = pow(1.0 - max(rd.y, 0.0), 1.1);
 
-                // 8 layers of orange/pink/purple tones
-                vec3 zenith = vec3(0.60, 0.25, 0.50);      // Deep purple zenith
-                vec3 upper = vec3(0.70, 0.30, 0.52);       // Purple-pink
-                vec3 midUpper = vec3(0.80, 0.38, 0.48);    // Pink-purple
-                vec3 middle = vec3(0.90, 0.45, 0.42);      // Rosy pink
-                vec3 midLower = vec3(1.00, 0.52, 0.38);    // Coral orange
-                vec3 lower = vec3(1.10, 0.58, 0.32);       // Peachy orange
-                vec3 nearHorizon = vec3(1.18, 0.62, 0.28); // Warm orange
-                vec3 horizon = vec3(1.25, 0.65, 0.25);     // Golden orange
+                // 8 layers - purple to pink to soft orange
+                vec3 zenith = vec3(0.55, 0.22, 0.52);       // Deep purple
+                vec3 upper1 = vec3(0.65, 0.28, 0.56);       // Purple
+                vec3 upper2 = vec3(0.75, 0.32, 0.58);       // Purple-pink
+                vec3 mid1 = vec3(0.85, 0.38, 0.54);         // Pink-purple
+                vec3 mid2 = vec3(0.95, 0.45, 0.48);         // Rosy pink
+                vec3 lower1 = vec3(1.05, 0.52, 0.42);       // Peachy pink
+                vec3 lower2 = vec3(1.12, 0.58, 0.38);       // Soft orange
+                vec3 horizon = vec3(1.18, 0.62, 0.35);      // Warm orange (not yellow!)
 
                 // Smooth 8-layer gradient
-                vec3 col = mix(zenith, upper, smoothstep(0.0, 0.14, skyGradient));
-                col = mix(col, midUpper, smoothstep(0.14, 0.28, skyGradient));
-                col = mix(col, middle, smoothstep(0.28, 0.42, skyGradient));
-                col = mix(col, midLower, smoothstep(0.42, 0.58, skyGradient));
-                col = mix(col, lower, smoothstep(0.58, 0.72, skyGradient));
-                col = mix(col, nearHorizon, smoothstep(0.72, 0.86, skyGradient));
-                col = mix(col, horizon, smoothstep(0.86, 1.0, skyGradient));
+                vec3 col = mix(zenith, upper1, smoothstep(0.0, 0.14, skyGradient));
+                col = mix(col, upper2, smoothstep(0.14, 0.28, skyGradient));
+                col = mix(col, mid1, smoothstep(0.28, 0.42, skyGradient));
+                col = mix(col, mid2, smoothstep(0.42, 0.56, skyGradient));
+                col = mix(col, lower1, smoothstep(0.56, 0.70, skyGradient));
+                col = mix(col, lower2, smoothstep(0.70, 0.85, skyGradient));
+                col = mix(col, horizon, smoothstep(0.85, 1.0, skyGradient));
 
-                // Add subtle orange variations based on azimuth
+                // Subtle pink/purple variations
                 float azimuth = atan(rd.z, rd.x);
-                vec3 orangeVar1 = vec3(1.15, 0.55, 0.25);
-                vec3 orangeVar2 = vec3(1.05, 0.48, 0.35);
-                col += mix(orangeVar1, orangeVar2, sin(azimuth * 2.0) * 0.5 + 0.5) * 0.08 * skyGradient;
+                vec3 var1 = vec3(0.95, 0.42, 0.52);
+                vec3 var2 = vec3(0.88, 0.38, 0.58);
+                col += mix(var1, var2, sin(azimuth * 2.0) * 0.5 + 0.5) * 0.06 * (1.0 - skyGradient);
 
-                // Softer sun glow with warm orange tones
-                col += vec3(1.30, 0.60, 0.25) * pow(sun, 10.0) * 0.6;
-                col += vec3(1.15, 0.52, 0.32) * pow(sun, 4.0) * 0.5;
-                col += vec3(1.00, 0.45, 0.40) * pow(sun, 2.0) * 0.3;
+                // Soft sun glow - warm but not too bright
+                col += vec3(1.25, 0.58, 0.32) * pow(sun, 10.0) * 0.5;
+                col += vec3(1.10, 0.50, 0.38) * pow(sun, 4.0) * 0.4;
+                col += vec3(0.95, 0.45, 0.45) * pow(sun, 2.0) * 0.25;
                 
                 vec4 res = raymarch(ro, rd, col);
                 col = col * (1.0 - res.w) + res.xyz;
